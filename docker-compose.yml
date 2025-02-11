@@ -1,0 +1,67 @@
+services:
+  zookeeper:
+    image: wurstmeister/zookeeper
+    container_name: zookeeper
+    restart: unless-stopped
+    ports:
+      - "2181:2181"
+  
+  kafka:
+    image: wurstmeister/kafka
+    container_name: kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: 10.0.0.126
+      KAFKA_ZOOKEEPER_CONNECT: 10.0.0.126:2181
+  
+  kafka-setup:
+    image: wurstmeister/kafka
+    depends_on:
+      - kafka
+    command: >
+      sh -c "
+        # Wait until Kafka is reachable
+        while ! nc -z kafka 9092; do
+          echo 'Waiting for Kafka to be ready...'
+          sleep 1;
+        done
+
+        # Create topics
+        kafka-topics.sh kafka:9092 --create --if-not-exists --topic stock --zookeeper 10.0.0.126:2181 --partitions 1 --replication-factor 1
+      "
+  spark:
+    image: bitnami/spark:3.4
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - HADOOP_USER_NAME=root
+      # - SPARK_LOCAL_IP=10.0.0.126
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+
+
+  # spark-worker:
+  #   image: bitnami/spark:latest
+  #   container_name: spark-worker
+  #   environment:
+  #     - SPARK_MODE=worker
+  #     - SPARK_MASTER_URL=spark://spark-master:7077
+  #     - SPARK_WORKER_MEMORY=1G
+  #     - SPARK_WORKER_CORES=1
+  #     - SPARK_RPC_AUTHENTICATION_ENABLED=no
+  #     - SPARK_RPC_ENCRYPTION_ENABLED=no
+  #     - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+  #     - SPARK_SSL_ENABLED=no
+  #     - SPARK_USER=spark
+  #   depends_on:
+  #     - spark
+
